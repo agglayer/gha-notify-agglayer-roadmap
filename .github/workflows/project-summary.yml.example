@@ -1,0 +1,33 @@
+name: Project Summary
+
+# Example workflow for agglayer organization
+# For other organizations, replace SLACK_APP_TOKEN_AGGLAYER_NOTIFY_GH_PROJECT with your own SLACK_BOT_TOKEN
+
+on:
+  schedule:
+    # Run Monday through Friday at 9 AM UTC
+    - cron: '0 9 * * 1-5'
+  workflow_dispatch:  # Allow manual triggering
+
+permissions:
+  contents: read
+
+jobs:
+  slack-summary:
+    name: Send Project Summary to Slack
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Send Project Summary to Slack
+        uses: ./
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          project-url: 'https://github.com/orgs/agglayer/projects/1'
+          slack-bot-token: ${{ secrets.SLACK_APP_TOKEN_AGGLAYER_NOTIFY_GH_PROJECT }}
+          slack-channel: '#standup'
+          max-items-per-user: '10'
+          done-items-days: '2'  # Show Done items from last 2 days
+          grouping-mode: 'assignee'  # Group by assignee (default) or 'milestone' 
