@@ -53686,6 +53686,7 @@ async function fetchProjectData(token, owner, projectNumber, isOrg) {
                     title
                     url
                     number
+                    body
                     createdAt
                     updatedAt
                     assignees(first: 10) {
@@ -53834,7 +53835,13 @@ async function fetchProjectData(token, owner, projectNumber, isOrg) {
                         type: 'DraftIssue', // assume draft for items without content
                         repository: undefined,
                         number: undefined,
-                        milestone
+                        milestone,
+                        body: undefined,
+                        parentIssues: [],
+                        childIssues: [],
+                        isCompleted: status.toLowerCase().includes('done') ||
+                            status.toLowerCase().includes('complete') ||
+                            status.toLowerCase().includes('finished')
                     });
                     continue;
                 }
@@ -53879,7 +53886,13 @@ async function fetchProjectData(token, owner, projectNumber, isOrg) {
                     type,
                     repository: content.repository?.name,
                     number: content.number,
-                    milestone
+                    milestone,
+                    body: content.body,
+                    parentIssues: [],
+                    childIssues: [],
+                    isCompleted: status.toLowerCase().includes('done') ||
+                        status.toLowerCase().includes('complete') ||
+                        status.toLowerCase().includes('finished')
                 });
             }
             // Update pagination variables
@@ -53982,61 +53995,66 @@ function formatDate(dateString) {
     });
 }
 /**
- * Group items by assignees and filter/sort them
+ * Process issue relationships to build parent-child trees
  */
-function groupItemsByAssignees(items, doneItemsDays) {
-    const userAssignments = {};
-    // First, group all items by assignees (without filtering)
+function processIssueRelationships(items) {
+    // Create a map for quick lookup by repository and issue number
+    const issueMap = new Map();
+    // First pass: build the issue map
     for (const item of items) {
-        if (item.assignees.length === 0) {
-            // Add to "Unassigned" if no assignees
-            if (!userAssignments['Unassigned']) {
-                userAssignments['Unassigned'] = [];
-            }
-            userAssignments['Unassigned'].push(item);
+        if (item.type === 'Issue' && item.repository && item.number) {
+            const key = `${item.repository}#${item.number}`;
+            issueMap.set(key, item);
         }
-        else {
-            // Add to each assignee
-            for (const assignee of item.assignees) {
-                if (!userAssignments[assignee]) {
-                    userAssignments[assignee] = [];
+    }
+    // Second pass: parse issue bodies for references and build relationships
+    for (const item of items) {
+        if (item.body && item.type === 'Issue') {
+            // Parse issue references in the body (e.g., #123, repo#123, fixes #123, closes #123)
+            const issueRefRegex = /(?:(?:fixes|closes|resolves|related to|see)\s+)?(?:([a-zA-Z0-9-]+)#)?(\d+)/gi;
+            let match;
+            while ((match = issueRefRegex.exec(item.body)) !== null) {
+                const referencedRepo = match[1] || item.repository; // Use current repo if not specified
+                const referencedNumber = match[2];
+                const referencedKey = `${referencedRepo}#${referencedNumber}`;
+                const referencedIssue = issueMap.get(referencedKey);
+                if (referencedIssue && referencedIssue.id !== item.id) {
+                    // This item references another issue
+                    if (!item.parentIssues.includes(referencedKey)) {
+                        item.parentIssues.push(referencedKey);
+                    }
+                    // The referenced issue has this as a child
+                    if (!referencedIssue.childIssues.includes(`${item.repository}#${item.number}`)) {
+                        referencedIssue.childIssues.push(`${item.repository}#${item.number}`);
+                    }
                 }
-                userAssignments[assignee].push(item);
             }
         }
     }
-    // Debug: log users before filtering
-    coreExports.info(`Users before filtering: ${Object.keys(userAssignments).join(', ')}`);
-    for (const user in userAssignments) {
-        coreExports.info(`${user}: ${userAssignments[user].length} items (${userAssignments[user].map((item) => item.status).join(', ')})`);
-    }
-    // Now filter items within each user's list - only show Done items if completed within specified days
-    for (const user in userAssignments) {
-        const beforeCount = userAssignments[user].length;
-        userAssignments[user] = userAssignments[user].filter((item) => shouldIncludeItem(item, doneItemsDays));
-        const afterCount = userAssignments[user].length;
-        coreExports.info(`${user}: ${beforeCount} items → ${afterCount} items after filtering`);
-        // Remove users who have no items left after filtering
-        if (userAssignments[user].length === 0) {
-            coreExports.info(`Removing ${user} - no items left after filtering`);
-            delete userAssignments[user];
+    return items;
+}
+/**
+ * Calculate progress percentage for an issue with child issues
+ */
+function calculateProgress(item, allItems) {
+    if (item.childIssues.length === 0)
+        return 100; // No children, consider complete based on status
+    let completedChildren = 0;
+    for (const childKey of item.childIssues) {
+        const childItem = allItems.find((i) => i.repository && i.number && `${i.repository}#${i.number}` === childKey);
+        if (childItem?.isCompleted) {
+            completedChildren++;
         }
     }
-    // Debug: log users after filtering
-    coreExports.info(`Users after filtering: ${Object.keys(userAssignments).join(', ')}`);
-    // Sort items within each user by status priority
-    for (const user in userAssignments) {
-        userAssignments[user].sort((a, b) => {
-            const priorityA = getStatusPriority(a.status);
-            const priorityB = getStatusPriority(b.status);
-            if (priorityA !== priorityB) {
-                return priorityA - priorityB;
-            }
-            // If same status priority, sort by updated date (newest first)
-            return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-        });
-    }
-    return userAssignments;
+    return Math.round((completedChildren / item.childIssues.length) * 100);
+}
+/**
+ * Create a progress bar visualization
+ */
+function createProgressBar(percentage, length = 10) {
+    const filled = Math.round((percentage / 100) * length);
+    const empty = length - filled;
+    return '█'.repeat(filled) + '░'.repeat(empty) + ` ${percentage}%`;
 }
 /**
  * Group items by milestones and filter/sort them
@@ -54085,24 +54103,16 @@ function groupItemsByMilestones(items, doneItemsDays) {
     return milestoneGroups;
 }
 /**
- * Format items for Slack message
+ * Format items for Slack message with tree structure and progress bars
  */
-function formatSlackMessage(itemGroupings, maxItemsPerUser, groupingMode = 'assignee') {
+function formatSlackMessage(itemGroupings, maxItemsPerUser) {
     const sections = [];
-    // Sort groups alphabetically, but put special groups at the end
+    // Sort milestones alphabetically, but put "No Milestone" at the end
     const sortedGroups = Object.keys(itemGroupings).sort((a, b) => {
-        if (groupingMode === 'assignee') {
-            if (a === 'Unassigned')
-                return 1;
-            if (b === 'Unassigned')
-                return -1;
-        }
-        else if (groupingMode === 'milestone') {
-            if (a === 'No Milestone')
-                return 1;
-            if (b === 'No Milestone')
-                return -1;
-        }
+        if (a === 'No Milestone')
+            return 1;
+        if (b === 'No Milestone')
+            return -1;
         return a.localeCompare(b);
     });
     for (const group of sortedGroups) {
@@ -54110,17 +54120,60 @@ function formatSlackMessage(itemGroupings, maxItemsPerUser, groupingMode = 'assi
         const displayItems = items.slice(0, maxItemsPerUser);
         const hasMore = items.length > maxItemsPerUser;
         const groupSection = [`*${group}* (${items.length} items):`];
-        for (const item of displayItems) {
+        // Separate parent issues from child issues for tree structure
+        const parentIssues = displayItems.filter((item) => item.childIssues.length > 0);
+        const childIssues = displayItems.filter((item) => item.childIssues.length === 0);
+        const allItems = Object.values(itemGroupings).flat();
+        // First, show parent issues with progress bars and their children
+        for (const parentItem of parentIssues) {
+            const statusEmoji = getStatusEmoji(parentItem.status);
+            const repoInfo = parentItem.repository
+                ? `[${parentItem.repository}${parentItem.number ? `#${parentItem.number}` : ''}]`
+                : '';
+            // Calculate progress and create progress bar
+            const progress = calculateProgress(parentItem, allItems);
+            const progressBar = createProgressBar(progress, 8);
+            // Add completion date for Done items
+            const isDone = parentItem.isCompleted;
+            const completionInfo = isDone
+                ? ` (${formatDate(parentItem.updatedAt)})`
+                : '';
+            groupSection.push(`  ${statusEmoji} <${parentItem.url}|${parentItem.title}>${completionInfo} ${repoInfo}`);
+            groupSection.push(`    📊 ${progressBar} (${parentItem.childIssues.length} sub-issues)`);
+            // Show child issues under this parent (if they're in the current milestone)
+            for (const childKey of parentItem.childIssues) {
+                const childItem = displayItems.find((item) => item.repository &&
+                    item.number &&
+                    `${item.repository}#${item.number}` === childKey);
+                if (childItem) {
+                    const childStatusEmoji = getStatusEmoji(childItem.status);
+                    const childRepoInfo = childItem.repository
+                        ? `[${childItem.repository}${childItem.number ? `#${childItem.number}` : ''}]`
+                        : '';
+                    const childCompletionInfo = childItem.isCompleted
+                        ? ` (${formatDate(childItem.updatedAt)})`
+                        : '';
+                    groupSection.push(`    ├─ ${childStatusEmoji} <${childItem.url}|${childItem.title}>${childCompletionInfo} ${childRepoInfo}`);
+                }
+            }
+        }
+        // Then show standalone child issues (those without parents in this milestone)
+        const standaloneChildren = childIssues.filter((item) => {
+            // Check if any of its parent issues are already shown in this milestone
+            const hasParentInMilestone = item.parentIssues.some((parentKey) => parentIssues.some((parent) => parent.repository &&
+                parent.number &&
+                `${parent.repository}#${parent.number}` === parentKey));
+            return !hasParentInMilestone;
+        });
+        for (const item of standaloneChildren) {
             const statusEmoji = getStatusEmoji(item.status);
             const statusBadge = item.status !== 'Unknown' ? `${item.status}` : '';
             const repoInfo = item.repository
                 ? `[${item.repository}${item.number ? `#${item.number}` : ''}]`
                 : '';
-            // Add completion date for Done items
-            const isDone = item.status.toLowerCase().includes('done') ||
-                item.status.toLowerCase().includes('complete') ||
-                item.status.toLowerCase().includes('finished');
-            const completionInfo = isDone ? ` (${formatDate(item.updatedAt)})` : '';
+            const completionInfo = item.isCompleted
+                ? ` (${formatDate(item.updatedAt)})`
+                : '';
             groupSection.push(`  ${statusEmoji} ${statusBadge} <${item.url}|${item.title}>${completionInfo} ${repoInfo}`);
         }
         if (hasMore) {
@@ -54130,8 +54183,8 @@ function formatSlackMessage(itemGroupings, maxItemsPerUser, groupingMode = 'assi
     }
     const totalItems = Object.values(itemGroupings).reduce((sum, items) => sum + items.length, 0);
     const groupCount = Object.keys(itemGroupings).length;
-    const groupType = groupingMode === 'milestone' ? 'milestones' : 'assignees';
-    const header = `📋 *Project Summary*\n${totalItems} items across ${groupCount} ${groupType}\n`;
+    const groupType = 'milestones';
+    const header = `📋 *Roadmap Summary*\n${totalItems} items across ${groupCount} ${groupType}\n`;
     return header + '\n' + sections.join('\n\n');
 }
 /**
@@ -54166,7 +54219,6 @@ async function run() {
         const slackChannel = coreExports.getInput('slack-channel');
         const maxItemsPerUser = parseInt(coreExports.getInput('max-items-per-user'), 10);
         const doneItemsDays = parseInt(coreExports.getInput('done-items-days'), 10);
-        const groupingMode = coreExports.getInput('grouping-mode');
         // Validate inputs
         if (!githubToken || !projectUrl || !slackBotToken || !slackChannel) {
             throw new Error('Missing required inputs: github-token, project-url, slack-bot-token, and slack-channel are required');
@@ -54178,22 +54230,14 @@ async function run() {
         // Fetch project data
         const items = await fetchProjectData(githubToken, owner, projectNumber, isOrg);
         coreExports.info(`📥 Retrieved ${items.length} items from project`);
-        // Group items based on the selected mode
-        let itemGroupings;
-        let groupCount;
-        if (groupingMode === 'milestone') {
-            itemGroupings = groupItemsByMilestones(items, doneItemsDays);
-            groupCount = Object.keys(itemGroupings).length;
-            coreExports.info(`🎯 Found ${groupCount} milestones`);
-        }
-        else {
-            // Default to assignee mode
-            itemGroupings = groupItemsByAssignees(items, doneItemsDays);
-            groupCount = Object.keys(itemGroupings).length;
-            coreExports.info(`👥 Found ${groupCount} assignees`);
-        }
-        // Format message
-        const message = formatSlackMessage(itemGroupings, maxItemsPerUser, groupingMode);
+        // Process parent-child relationships
+        const processedItems = processIssueRelationships(items);
+        // Group items by milestones
+        const itemGroupings = groupItemsByMilestones(processedItems, doneItemsDays);
+        const groupCount = Object.keys(itemGroupings).length;
+        coreExports.info(`🎯 Found ${groupCount} milestones`);
+        // Format message with tree structure and progress bars
+        const message = formatSlackMessage(itemGroupings, maxItemsPerUser);
         // Send to Slack
         coreExports.info('📤 Sending message to Slack...');
         await sendSlackMessage(slackBotToken, slackChannel, message);
