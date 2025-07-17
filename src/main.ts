@@ -162,6 +162,7 @@ async function fetchProjectData(
                     title
                     url
                     number
+                    body
                     createdAt
                     updatedAt
                     assignees(first: 10) {
@@ -530,8 +531,18 @@ function processIssueRelationships(items: ProjectItem[]): ProjectItem[] {
   }
 
   // Second pass: parse issue bodies for references and build relationships
+  core.info(`🔍 Starting relationship processing for ${items.length} items`)
+  core.info(
+    `📋 Item types: ${items.map((i) => `${i.type}(${i.body ? 'has body' : 'no body'})`).join(', ')}`
+  )
+
   for (const item of items) {
-    if (item.body && item.type === 'Issue') {
+    if (item.body && (item.type === 'Issue' || item.type === 'PullRequest')) {
+      core.info(
+        `🔍 Processing issue ${item.repository}#${item.number}: "${item.title}"`
+      )
+      core.info(`📝 Body length: ${item.body.length} characters`)
+
       // Parse issue references in the body (e.g., #123, repo#123, fixes #123, closes #123)
       const issueRefRegex =
         /(?:(?:fixes|closes|resolves|related to|see)\s+)?(?:([a-zA-Z0-9-]+)#)?(\d+)/gi
@@ -547,6 +558,9 @@ function processIssueRelationships(items: ProjectItem[]): ProjectItem[] {
           // This item references another issue
           if (!item.parentIssues.includes(referencedKey)) {
             item.parentIssues.push(referencedKey)
+            core.info(
+              `🔗 Found relationship: ${item.repository}#${item.number} references ${referencedKey}`
+            )
           }
 
           // The referenced issue has this as a child
@@ -558,10 +572,29 @@ function processIssueRelationships(items: ProjectItem[]): ProjectItem[] {
             referencedIssue.childIssues.push(
               `${item.repository}#${item.number}`
             )
+            core.info(
+              `👶 ${referencedKey} now has child: ${item.repository}#${item.number}`
+            )
           }
+        } else {
+          core.info(`❌ No match found for reference: ${referencedKey}`)
         }
       }
     }
+  }
+
+  // Log final relationship counts
+  const itemsWithChildren = items.filter((item) => item.childIssues.length > 0)
+  const itemsWithParents = items.filter((item) => item.parentIssues.length > 0)
+
+  core.info(`📊 Relationship summary:`)
+  core.info(`   ${itemsWithChildren.length} parent issues (have children)`)
+  core.info(`   ${itemsWithParents.length} child issues (have parents)`)
+
+  for (const parent of itemsWithChildren) {
+    core.info(
+      `👨‍👩‍👧‍👦 ${parent.repository}#${parent.number} has ${parent.childIssues.length} children: ${parent.childIssues.join(', ')}`
+    )
   }
 
   return items
