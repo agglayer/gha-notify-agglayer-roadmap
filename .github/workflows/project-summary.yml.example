@@ -1,7 +1,7 @@
 name: Project Summary
 
-# Example workflow for agglayer organization
-# For other organizations, replace SLACK_APP_TOKEN_AGGLAYER_NOTIFY_GH_PROJECT with your own SLACK_BOT_TOKEN
+# Example workflow for agglayer organization roadmap project
+# For other organizations, replace SLACK_APP_TOKEN_AGGLAYER_NOTIFY_ROADMAP with your own SLACK_BOT_TOKEN
 
 on:
   schedule:
@@ -26,8 +26,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           project-url: 'https://github.com/orgs/agglayer/projects/1'
-          slack-bot-token: ${{ secrets.SLACK_APP_TOKEN_AGGLAYER_NOTIFY_GH_PROJECT }}
+          slack-bot-token: ${{ secrets.SLACK_APP_TOKEN_AGGLAYER_NOTIFY_ROADMAP }}
           slack-channel: '#standup'
           max-items-per-user: '10'
-          done-items-days: '2'  # Show Done items from last 2 days
-          grouping-mode: 'assignee'  # Group by assignee (default) or 'milestone' 
+          done-items-days: '2'  # Show Done items from last 2 days 

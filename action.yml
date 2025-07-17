@@ -1,7 +1,7 @@
-name: GitHub Projects to Slack Summary
+name: Agglayer Roadmap Summaries to Slack
 description:
-  Publishes summaries of GitHub Projects to Slack, showing tasks/issues grouped
-  by engineers
+  Publishes summaries of the Agglayer Roadmap GitHub repository project to Slack, with
+  intelligent milestone-based grouping, issue trees, and progress tracking
 author: sebastiendan
 
 # Add your action's branding here. This will appear on the GitHub Marketplace.
@@ -16,13 +16,13 @@ inputs:
     required: true
   project-url:
     description:
-      'GitHub Project URL (e.g., https://github.com/orgs/myorg/projects/1)'
+      'Agglayer Roadmap repository project URL (e.g., https://github.com/orgs/agglayer/projects/1)'
     required: true
   slack-bot-token:
-    description: 'Slack Bot Token (starts with xoxb-)'
+    description: 'Slack Bot Token (use SLACK_APP_TOKEN_AGGLAYER_NOTIFY_ROADMAP)'
     required: true
   slack-channel:
-    description: 'Slack channel to post to (e.g., #general or C1234567890)'
+    description: 'Slack channel to post to (e.g., #roadmap-updates or #standup)'
     required: true
   assignee-field:
     description:
@@ -37,19 +37,16 @@ inputs:
     description: 'Show Done items only if completed within this many days (defaults to 1)'
     required: false
     default: '1'
-  grouping-mode:
-    description: 'How to group items: "assignee" or "milestone" (defaults to "assignee")'
-    required: false
-    default: 'assignee'
+
 
 # Define your outputs here.
 outputs:
   summary-sent:
-    description: 'Whether the summary was successfully sent to Slack'
+    description: 'Whether the roadmap summary was successfully sent to Slack'
   total-items:
-    description: 'Total number of items processed'
+    description: 'Total number of roadmap items processed'
   users-count:
-    description: 'Number of users with assigned items'
+    description: 'Number of milestones/assignees with items'
 
 runs:
   using: node20

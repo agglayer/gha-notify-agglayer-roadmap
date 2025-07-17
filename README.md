@@ -1,4 +1,4 @@
-# GitHub Projects to Slack Summary
+# Agglayer Roadmap Summaries to Slack
 
 [![GitHub Super-Linter](https://github.com/actions/typescript-action/actions/workflows/linter.yml/badge.svg)](https://github.com/super-linter/super-linter)
 ![CI](https://github.com/actions/typescript-action/actions/workflows/ci.yml/badge.svg)
@@ -6,26 +6,26 @@
 [![CodeQL](https://github.com/actions/typescript-action/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/actions/typescript-action/actions/workflows/codeql-analysis.yml)
 [![Coverage](./badges/coverage.svg)](./badges/coverage.svg)
 
-A GitHub Action that publishes summaries of GitHub Projects to Slack, showing
-tasks/issues grouped by engineers with all relevant fields. Perfect for standups
-and project status tracking.
+A specialized GitHub Action that publishes summaries of the Agglayer Roadmap GitHub repository project to Slack, with intelligent milestone-based grouping, issue tree structures, and progress tracking for effective roadmap management.
 
 ## Features
 
-- 📋 **Project Summaries**: Fetches all items from GitHub Projects (V2)
-- 👥 **Engineer Grouping**: Groups tasks/issues by assigned engineers
-- 📊 **Rich Information**: Shows item type, status, repository, and issue
-  numbers
+- 📋 **Roadmap Summaries**: Fetches all items from the Agglayer Roadmap GitHub repository project (V2)
+- 🎯 **Milestone Grouping**: Organizes roadmap items by milestones for strategic overview
+- 🌳 **Issue Tree Structure**: Shows parent-child relationships between issues with visual hierarchy
+- 📊 **Progress Tracking**: Displays progress bars for parent issues based on completed sub-issues
+- 🔗 **Cross-Repository**: Aggregates issues and sub-issues from multiple repositories
 - 🔄 **Multiple Item Types**: Supports Issues, Pull Requests, and Draft Issues
-- 📱 **Slack App Integration**: Uses Slack Bot tokens for secure, easy setup
-- ⚙️ **Customizable**: Configurable item limits and channel targeting
+- 📱 **Slack Integration**: Pre-configured for Agglayer with secure Slack Bot integration
+- ⚙️ **Roadmap-Optimized**: Configurable filters for active vs completed milestones
+- 🗓️ **Smart Filtering**: Shows recently completed items while focusing on active work
 
 ## Usage
 
-### Basic Usage
+### Basic Roadmap Summary with Tree Structure
 
 ```yaml
-name: Project Summary
+name: Agglayer Roadmap Summary
 on:
   schedule:
     - cron: '0 9 * * 1-5' # Monday-Friday at 9 AM
@@ -35,23 +35,23 @@ permissions:
   contents: read
 
 jobs:
-  slack-summary:
+  roadmap-summary:
     runs-on: ubuntu-latest
     steps:
-      - name: Send Project Summary to Slack
-        uses: agglayer/gha-notify-gh-project@v1
+      - name: Send Roadmap Summary to Slack
+        uses: agglayer/gha-notify-agglayer-roadmap@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          project-url: 'https://github.com/orgs/your-org/projects/1'
-          slack-bot-token: ${{
-            secrets.SLACK_APP_TOKEN_AGGLAYER_NOTIFY_GH_PROJECT }} # Pre-configured org secret
-          slack-channel: '#standup'
+          project-url: 'https://github.com/orgs/agglayer/projects/1'
+          slack-bot-token: ${{ secrets.SLACK_APP_TOKEN_AGGLAYER_NOTIFY_ROADMAP }}
+          slack-channel: '#roadmap-updates'
+          done-items-days: '3'  # Show completed items from last 3 days
 ```
 
-### Advanced Usage
+### Daily Team Summary
 
 ```yaml
-name: Project Summary
+name: Daily Team Summary
 on:
   schedule:
     - cron: '0 9 * * 1-5' # Monday-Friday at 9 AM
@@ -61,211 +61,166 @@ permissions:
   contents: read
 
 jobs:
-  slack-summary:
+  team-summary:
     runs-on: ubuntu-latest
     steps:
-      - name: Send Project Summary to Slack
-        uses: agglayer/gha-notify-gh-project@v1
+      - name: Send Team Summary to Slack
+        uses: agglayer/gha-notify-agglayer-roadmap@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          project-url: 'https://github.com/orgs/your-org/projects/1'
-          slack-bot-token: ${{ secrets.SLACK_BOT_TOKEN }}
+          project-url: 'https://github.com/orgs/agglayer/projects/1'
+          slack-bot-token: ${{ secrets.SLACK_APP_TOKEN_AGGLAYER_NOTIFY_ROADMAP }}
           slack-channel: '#standup'
           max-items-per-user: '5'
+          done-items-days: '1'  # Show yesterday's completions
 ```
-
-> **Note for agglayer users**: Replace `SLACK_BOT_TOKEN` with
-> `SLACK_APP_TOKEN_AGGLAYER_NOTIFY_GH_PROJECT` to use the pre-configured
-> organization secret.
 
 ## Inputs
 
 | Input                | Description                                                         | Required | Default     |
 | -------------------- | ------------------------------------------------------------------- | -------- | ----------- |
-| `github-token`       | GitHub token with access to read projects                           | ✅       |             |
-| `project-url`        | GitHub Project URL (e.g., https://github.com/orgs/myorg/projects/1) | ✅       |             |
-| `slack-bot-token`    | Slack Bot Token (starts with xoxb-)                                 | ✅       |             |
-| `slack-channel`      | Slack channel to post to (e.g., #general or C1234567890)            | ✅       |             |
+| `github-token`       | GitHub token with access to read repository projects                | ✅       |             |
+| `project-url`        | Agglayer Roadmap repository project URL                             | ✅       |             |
+| `slack-bot-token`    | Slack Bot Token (use SLACK_APP_TOKEN_AGGLAYER_NOTIFY_ROADMAP)       | ✅       |             |
+| `slack-channel`      | Slack channel to post to (e.g., #roadmap-updates)                  | ✅       |             |
 | `assignee-field`     | Name of the assignee field in the project                           | ❌       | `Assignees` |
-| `max-items-per-user` | Maximum number of items to show per user                            | ❌       | `10`        |
+| `max-items-per-user` | Maximum number of items to show per milestone                       | ❌       | `10`        |
 | `done-items-days`    | Show Done items only if completed within this many days             | ❌       | `1`         |
-| `grouping-mode`      | How to group items: "assignee" or "milestone"                       | ❌       | `assignee`  |
 
 ## Outputs
 
 | Output         | Description                                        |
 | -------------- | -------------------------------------------------- |
-| `summary-sent` | Whether the summary was successfully sent to Slack |
-| `total-items`  | Total number of items processed                    |
-| `users-count`  | Number of users with assigned items                |
+| `summary-sent` | Whether the roadmap summary was successfully sent to Slack |
+| `total-items`  | Total number of roadmap items processed            |
+| `users-count`  | Number of milestones with items                    |
 
-## Setup
+## Agglayer-Optimized Setup
 
-### 1. GitHub Token
+### Quick Start for Agglayer Team
 
-The action requires a GitHub token with access to GitHub Projects V2.
-**Important**: `GITHUB_TOKEN` has limited access to organization projects and
-may not work for all scenarios.
+This action is pre-configured for the Agglayer organization - you can use it immediately:
 
-#### Using GITHUB_TOKEN (Limited Support)
+```yaml
+- name: Send Roadmap Summary to Slack
+  uses: agglayer/gha-notify-agglayer-roadmap@v1
+  with:
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    project-url: 'https://github.com/orgs/agglayer/projects/1'
+    slack-bot-token: ${{ secrets.SLACK_APP_TOKEN_AGGLAYER_NOTIFY_ROADMAP }}
+    slack-channel: '#your-channel'
+    done-items-days: '3'  # Show recent completions for context
+```
 
-The default `GITHUB_TOKEN` can only access projects in certain cases:
+Just invite the bot to your desired channel with `/invite @Agglayer Github Project Notifier` and you're ready to go!
 
-- **Repository projects**: Works if the project is linked to the repository
-- **Organization projects**: May fail with "Could not resolve to ProjectV2"
-  error
+### GitHub Token Setup
 
-Set minimal permissions in your workflow:
+The action requires a GitHub token with access to the Agglayer roadmap repository project:
+
+#### Using GITHUB_TOKEN (Recommended)
+
+For repository projects, the default `GITHUB_TOKEN` works well:
 
 ```yaml
 permissions:
   contents: read
 ```
 
-#### Using Personal Access Token (Recommended for Organization Projects)
+#### Alternative: Personal Access Token
 
-For reliable access to organization projects, create a personal access token
-with:
-
-- `read:org` (to access organization resources)
+If you encounter access issues, create a personal access token with:
+- `repo` (to access repository resources)
 - `read:project` (to read project data)
 
-1. Go to GitHub Settings > Developer settings > Personal access tokens >
-   Fine-grained tokens
+1. Go to GitHub Settings > Developer settings > Personal access tokens
 2. Create a token with the above permissions
 3. Add it as a repository secret named `GITHUB_PAT`
 4. Use `github-token: ${{ secrets.GITHUB_PAT }}` in your workflow
-
-**For agglayer users**: The pre-configured token already has the necessary
-permissions.
-
-### 2. Slack App Setup
-
-Instead of using webhooks, this action uses a Slack App which is more secure and
-easier to set up:
-
-#### Option A: For agglayer Organization (Instant Use)
-
-If you're using this action within the `agglayer` GitHub organization, you can
-use it immediately with the pre-configured organization secret:
-
-```yaml
-- name: Send Project Summary to Slack
-  uses: agglayer/gha-notify-gh-project@v1
-  with:
-    github-token: ${{ secrets.GITHUB_TOKEN }} # PAT if org project, see below
-    project-url: 'https://github.com/orgs/agglayer/projects/1'
-          slack-bot-token: ${{ secrets.SLACK_APP_TOKEN_AGGLAYER_NOTIFY_GH_PROJECT }}
-      slack-channel: '#your-channel'
-      done-items-days: 2  # Optional: Show Done items from last 2 days (default: 1)
-      grouping-mode: milestone  # Optional: Group by milestone instead of assignee
-```
-
-Just invite the bot to your desired channel with `/invite @Agglayer Github Project Notifier`
-and you're ready to go!
-
-#### Option B: Use the Pre-built Slack App (Other Organizations)
-
-1. **Install the App**: Click the "Add to Slack" button below to install the
-   pre-built app to your workspace
-
-   [![Add to Slack](https://platform.slack-edge.com/img/add_to_slack.png)](https://slack.com/oauth/v2/authorize?client_id=YOUR_CLIENT_ID&scope=chat:write&user_scope=)
-
-2. **Get the Bot Token**: After installation, you'll receive a Bot User OAuth
-   Token that starts with `xoxb-`
-
-3. **Add the Token as a Secret**: In your GitHub repository, go to Settings >
-   Secrets and Variables > Actions, then add a new secret named
-   `SLACK_BOT_TOKEN` with your bot token
-
-4. **Invite the Bot**: You must manually invite the bot to each channel where
-   you want to receive summaries by typing `/invite @GitHub Projects Bot` in the
-   channel
-
-#### Option C: Create Your Own Slack App
-
-1. **Create a Slack App**: Go to
-   [api.slack.com/apps](https://api.slack.com/apps) and create a new app
-2. **Configure OAuth Scopes**: In "OAuth & Permissions", add this Bot Token
-   Scope:
-   - `chat:write` - Send messages to channels the bot is a member of
-3. **Install the App**: Click "Install to Workspace" and authorize the app
-4. **Get the Bot Token**: Copy the "Bot User OAuth Token" (starts with `xoxb-`)
-5. **Add as Secret**: Add the token as `SLACK_BOT_TOKEN` in your GitHub
-   repository secrets
-6. **Invite the Bot**: You must manually invite the bot to each channel where
-   you want to receive summaries by typing `/invite @YourBotName` in the channel
-
-### 3. Project URL
-
-The action supports both organization and user projects:
-
-- Organization projects: `https://github.com/orgs/your-org/projects/1`
-- User projects: `https://github.com/users/your-username/projects/1`
-
-### 4. Channel Configuration
-
-You can specify the channel in several ways:
-
-- Channel name: `#general`
-- Channel ID: `C1234567890`
-- Direct message: `@username`
-
-**Important**: The bot must be manually invited to each channel before it can
-post messages. Use `/invite @YourBotName` in the target channel.
 
 ## Troubleshooting
 
 ### "Could not resolve to a ProjectV2 with the number X"
 
-This error occurs when the GitHub token cannot access the specified project.
-Common causes:
+This error typically means:
+1. **Project doesn't exist**: Verify the Agglayer repository project URL is correct
+2. **Token permissions**: Ensure your token has `repo` and `read:project` permissions
+3. **Project URL**: Verify the correct project URL format: `https://github.com/orgs/agglayer/projects/1`
+4. **Repository access**: Ensure your token has access to the repository
 
-1. **Project doesn't exist**: Verify the project URL and number are correct
-2. **Using GITHUB_TOKEN with organization projects**: `GITHUB_TOKEN` has limited
-   access to organization projects
-3. **Missing permissions**: The token lacks necessary permissions
+### Channel Setup
 
-**Solutions:**
+**Important**: The bot must be manually invited to each channel before it can post messages. Use `/invite @Agglayer Github Project Notifier` in the target channel.
 
-- **For organization projects**: Use a Personal Access Token instead of
-  `GITHUB_TOKEN`
-- **Check project URL**: Ensure the project exists at the specified URL
-- **Verify project number**: The number in the URL should match an existing
-  project
+Supported channel formats:
+- Channel name: `#roadmap-updates`
+- Channel ID: `C1234567890`
 
-### Project Access Permissions
+## Tree Structure and Progress Tracking
 
-- **Repository projects**: `GITHUB_TOKEN` usually works
-- **Organization projects**: Requires Personal Access Token with `read:org` and
-  `read:project` permissions
-- **Private projects**: Ensure the token has access to the
-  organization/repository
+The action automatically organizes issues into parent-child relationships and displays progress bars for parent issues:
+
+### Issue Tree Structure
+
+Issues are organized hierarchically based on references in issue bodies:
+- **Parent Issues**: Issues that have sub-issues (child issues) 
+- **Child Issues**: Issues that reference parent issues using keywords like "fixes", "closes", "relates to"
+- **Progress Bars**: Visual representation of completion percentage for parent issues
+
+### Cross-Repository Support
+
+The action aggregates issues from multiple repositories within the roadmap project, maintaining relationships even when parent and child issues are in different repositories.
+
+## Roadmap Management Benefits
+
+This action is specifically designed for effective roadmap management with advanced project tracking:
+
+- **Strategic Overview**: Milestone grouping provides a high-level view of roadmap progress
+- **Issue Hierarchy**: Visual tree structure shows parent-child relationships between issues
+- **Progress Tracking**: Real-time progress bars for parent issues based on completed sub-issues
+- **Cross-Repository**: Aggregates roadmap items across all repositories while maintaining relationships
+- **Timeline Tracking**: See which milestones are progressing and which need attention
+- **Completion Momentum**: Track progress by showing recently completed items with timestamps
 
 ## Example Output
+
+### Roadmap Summary with Tree Structure and Progress Bars
 
 The action will send a message to Slack that looks like this:
 
 ```
-📋 Project Summary
-12 items across 4 assignees
+📋 Roadmap Summary
+18 items across 5 milestones
 
-alice (3 items):
-  🐛 `In Progress` Fix authentication bug [frontend#123]
-  🔄 `Review` Add dark mode support [frontend#124]
-  📝 `Todo` Update documentation
+Q1 2024 - Core Protocol (6 items):
+  🚧 Consensus algorithm optimization [consensus#123]
+    📊 ████████░░ 80% (5 sub-issues)
+    ├─ ✅ Implement consensus rules [consensus#124] (Jan 14, 16:45 UTC)
+    ├─ ✅ Add validation tests [consensus#125] (Jan 15, 09:30 UTC)
+    ├─ ✅ Update documentation [consensus#126] (Jan 15, 14:20 UTC)
+    ├─ ✅ Performance benchmarks [consensus#127] (Jan 16, 11:15 UTC)
+    ├─ 🚧 Security review [consensus#128]
+  
+  📋 Todo Network layer improvements [network#456]
+    📊 ██░░░░░░░░ 20% (10 sub-issues)
+    ├─ ✅ Protocol specification [network#457] (Jan 10, 10:30 UTC)
+    ├─ ✅ Basic implementation [network#458] (Jan 12, 15:45 UTC)
+    ├─ 🚧 Peer discovery [network#459]
+    ├─ 📋 Todo Message routing [network#460]
+    ... and 6 more items
 
-bob (2 items):
-  🐛 `In Progress` Database migration [backend#456]
-  🔄 `Ready` API endpoint refactor [backend#457]
+Q1 2024 - Developer Tools (4 items):
+  🚧 SDK v2 development [sdk#234]
+    📊 ██████░░░░ 60% (3 sub-issues)
+    ├─ ✅ Core API design [sdk#235] (Jan 13, 12:00 UTC)
+    ├─ ✅ TypeScript types [sdk#236] (Jan 14, 16:30 UTC)
+    ├─ 🚧 Documentation [sdk#237]
+  
+  📋 Todo CLI tool enhancements [tools#567]
 
-charlie (1 items):
-  📝 `Todo` Research new framework
-
-Unassigned (6 items):
-  🐛 `Backlog` Performance optimization [frontend#125]
-  🔄 `Todo` Code review process [meta#789]
-  ... and 4 more items
+No Milestone (2 items):
+  📋 Todo CI/CD pipeline updates [infra#567]
+  🚧 Bug fixes and maintenance [maintenance#890]
 ```
 
 ## Development
@@ -274,6 +229,7 @@ Unassigned (6 items):
 
 - Node.js 20.x or later
 - npm
+- Access to Agglayer GitHub organization (for testing)
 
 ### Setup
 
@@ -297,25 +253,40 @@ Unassigned (6 items):
 
 ### Local Testing
 
-You can test the action locally using the GitHub Actions local development
-tools:
+Test the action locally with the Agglayer roadmap organization project:
 
 ```bash
-# Set up environment variables
-export INPUT_GITHUB_TOKEN="your-github-token"  # Token with read:org and read:project permissions
-export INPUT_PROJECT_URL="https://github.com/orgs/your-org/projects/1"
+# Set up environment variables for Agglayer roadmap organization project
+export INPUT_GITHUB_TOKEN="your-github-token"  # Use PAT for organization projects
+export INPUT_PROJECT_URL="https://github.com/orgs/agglayer/projects/1"
 export INPUT_SLACK_BOT_TOKEN="xoxb-your-bot-token"
-export INPUT_SLACK_CHANNEL="#your-channel"
+export INPUT_SLACK_CHANNEL="#test-channel"
+export INPUT_GROUPING_MODE="milestone"  # Test milestone grouping
+export INPUT_DONE_ITEMS_DAYS="3"
 
 # Run the action locally
 npm run local-action
 ```
 
-## License
+### Testing Milestone Functionality
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
-for details.
+To test the milestone grouping feature:
+
+1. Ensure your test project has items with milestones assigned
+2. Set `INPUT_GROUPING_MODE="milestone"`
+3. Run the action and verify items are grouped by milestone
+4. Check that "No Milestone" items are properly grouped
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! This project is specifically designed for Agglayer's roadmap management needs with GitHub organization projects. When contributing:
+
+1. Consider the roadmap management use case for organization projects
+2. Test with milestone grouping functionality
+3. Ensure compatibility with Agglayer's organization project structure
+4. Test with Personal Access Tokens (required for organization projects)
+5. Update tests to cover new functionality
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
