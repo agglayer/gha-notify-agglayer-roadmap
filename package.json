@@ -1,7 +1,7 @@
 {
   "name": "gha-notify-agglayer-roadmap",
   "description": "GitHub Action to publish Agglayer Roadmap repository project summaries to Slack with milestone grouping and issue trees",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "sebastiendan",
   "type": "module",
   "private": true,
