@@ -53782,16 +53782,34 @@ async function fetchProjectData(token, owner, projectNumber, isOrg) {
                     // Extract itemId - use databaseId if available, otherwise full GraphQL ID
                     const itemId = item.databaseId || item.id;
                     coreExports.info(`🔍 Item ID: ${itemId} (databaseId: ${item.databaseId}, id: ${item.id}) for "${title}"`);
+                    // Special debugging for the specific item the user mentioned
+                    if (item.databaseId === 119335827 || itemId === '119335827') {
+                        coreExports.info(`🎯 DEBUGGING SPECIFIC ITEM 119335827: "${title}"`);
+                        coreExports.info(`🎯 Raw fieldValues: ${JSON.stringify(item.fieldValues, null, 2)}`);
+                    }
                     const baseUrl = isOrg
                         ? `https://github.com/orgs/${owner}/projects/${projectNumber}`
                         : `https://github.com/users/${owner}/projects/${projectNumber}`;
                     let itemUrl = `${baseUrl}?pane=issue&itemId=${itemId}`;
                     if (item.fieldValues?.nodes) {
+                        // Debug: Show all field types for the specific item
+                        if (item.databaseId === 119335827 || itemId === '119335827') {
+                            coreExports.info(`🎯 All field types for item 119335827:`);
+                            for (const fv of item.fieldValues.nodes) {
+                                coreExports.info(`   - ${fv.__typename}: ${fv.field?.name || 'unnamed'}`);
+                            }
+                        }
                         // Process field values
                         for (const fieldValue of item.fieldValues.nodes) {
                             const fieldName = fieldValue.field?.name;
                             // Handle milestone fields specially since they have different structure
                             if (fieldValue.__typename === 'ProjectV2ItemFieldMilestoneValue') {
+                                // Add detailed debugging for milestone fields
+                                coreExports.info(`🎯 MILESTONE FIELD DEBUG:`);
+                                coreExports.info(`   Field name: "${fieldName || 'unnamed'}"`);
+                                coreExports.info(`   Field value type: ${fieldValue.__typename}`);
+                                coreExports.info(`   Raw milestone object: ${JSON.stringify(fieldValue.milestone, null, 2)}`);
+                                coreExports.info(`   Milestone title: "${fieldValue.milestone?.title || 'NULL'}"`);
                                 milestone = fieldValue.milestone?.title;
                                 if (milestone) {
                                     coreExports.info(`🎯 Milestone found: "${milestone}" from milestone field`);

@@ -244,12 +244,30 @@ async function fetchProjectData(
           core.info(
             `🔍 Item ID: ${itemId} (databaseId: ${item.databaseId}, id: ${item.id}) for "${title}"`
           )
+
+          // Special debugging for the specific item the user mentioned
+          if (item.databaseId === 119335827 || itemId === '119335827') {
+            core.info(`🎯 DEBUGGING SPECIFIC ITEM 119335827: "${title}"`)
+            core.info(
+              `🎯 Raw fieldValues: ${JSON.stringify(item.fieldValues, null, 2)}`
+            )
+          }
           const baseUrl = isOrg
             ? `https://github.com/orgs/${owner}/projects/${projectNumber}`
             : `https://github.com/users/${owner}/projects/${projectNumber}`
           let itemUrl = `${baseUrl}?pane=issue&itemId=${itemId}`
 
           if (item.fieldValues?.nodes) {
+            // Debug: Show all field types for the specific item
+            if (item.databaseId === 119335827 || itemId === '119335827') {
+              core.info(`🎯 All field types for item 119335827:`)
+              for (const fv of item.fieldValues.nodes) {
+                core.info(
+                  `   - ${fv.__typename}: ${fv.field?.name || 'unnamed'}`
+                )
+              }
+            }
+
             // Process field values
             for (const fieldValue of item.fieldValues.nodes) {
               const fieldName = fieldValue.field?.name
@@ -258,6 +276,17 @@ async function fetchProjectData(
               if (
                 fieldValue.__typename === 'ProjectV2ItemFieldMilestoneValue'
               ) {
+                // Add detailed debugging for milestone fields
+                core.info(`🎯 MILESTONE FIELD DEBUG:`)
+                core.info(`   Field name: "${fieldName || 'unnamed'}"`)
+                core.info(`   Field value type: ${fieldValue.__typename}`)
+                core.info(
+                  `   Raw milestone object: ${JSON.stringify(fieldValue.milestone, null, 2)}`
+                )
+                core.info(
+                  `   Milestone title: "${fieldValue.milestone?.title || 'NULL'}"`
+                )
+
                 milestone = fieldValue.milestone?.title
                 if (milestone) {
                   core.info(
