@@ -53767,17 +53767,23 @@ async function fetchProjectData(token, owner, projectNumber, isOrg) {
                 throw new Error(`Project not found: ${owner}/${projectNumber}`);
             }
             // Process items from this page
+            // MILESTONE STRATEGY: Repository milestones are prioritized over Projects v2 milestone fields
+            // - Repository milestones: item.content.milestone.title (preferred)
+            // - Projects v2 milestones: ProjectV2ItemFieldMilestoneValue (fallback)
             for (const item of project.items.nodes) {
                 // Debug: Log what we have for each item
                 coreExports.info(`🔍 Processing item ${item.databaseId || item.id}:`);
                 coreExports.info(`   Content exists: ${item.content ? 'YES' : 'NO'}`);
                 coreExports.info(`   Field values count: ${item.fieldValues?.nodes?.length || 0}`);
-                // Handle items with null/undefined content but try to extract from field values
+                // Handle items with null/undefined content
                 if (!item.content) {
-                    coreExports.error(`❌ REAL ISSUE WITH NULL CONTENT: ID=${item.id} | This should not happen!`);
-                    coreExports.error(`   This indicates a GraphQL query or permissions problem`);
+                    coreExports.error(`❌ ITEM WITH NULL CONTENT: ID=${item.id}`);
+                    coreExports.error(`   This likely indicates:`);
+                    coreExports.error(`   1. Draft issue (manual project item)`);
+                    coreExports.error(`   2. GraphQL query issue`);
+                    coreExports.error(`   3. Insufficient token permissions`);
                     coreExports.error(`   Raw item: ${JSON.stringify(item, null, 2)}`);
-                    coreExports.info(`⚠️ Item with null content: ID=${item.id} | FieldValues: ${item.fieldValues?.nodes?.length || 0} | ProjectUpdatedAt: ${item.updatedAt}`);
+                    coreExports.info(`⚠️ Processing as draft item: ID=${item.id} | FieldValues: ${item.fieldValues?.nodes?.length || 0}`);
                     // Try to extract information from field values
                     let title = 'Unknown Title';
                     let status = 'Unknown';
@@ -53823,32 +53829,21 @@ async function fetchProjectData(token, owner, projectNumber, isOrg) {
                                 coreExports.info(`     ✅ Milestone found: "${field.milestone.title}"`);
                             }
                         });
-                        // Provide actionable guidance
-                        if (!item.content &&
-                            milestoneFields.length > 0 &&
-                            milestoneFields[0].milestone === null) {
+                        // Key insight for troubleshooting
+                        if (!item.content) {
                             coreExports.warning(`
-🔍 TROUBLESHOOTING GUIDANCE for item ${item.databaseId}:
+🚨 MILESTONE ISSUE DIAGNOSIS for item ${item.databaseId}:
 
-This item appears to be a DRAFT ISSUE with no milestone assigned to the Projects v2 milestone field.
+This item has no content, which means it's likely:
+1. A draft issue (manual project item), OR  
+2. A real issue with GraphQL/permissions problems
 
-POSSIBLE SOLUTIONS:
-1. Convert this draft issue to a linked GitHub issue:
-   - Open the item in your project
-   - Click "Convert to issue" 
-   - Choose a repository
-   - This will create a real GitHub issue that can have repository milestones
+SOLUTION: If this should be a real GitHub issue:
+- Ensure your GitHub token has "repo" and "read:project" scopes
+- Check if the issue exists in a repository you have access to
+- Verify the project is properly linked to repositories
 
-2. Assign a milestone to the Projects v2 milestone field:
-   - Open the item in your project
-   - Use the milestone field dropdown to select a milestone
-   - Note: This is different from repository milestones
-
-3. Link an existing issue:
-   - Instead of creating draft issues, add existing GitHub issues to your project
-   - Use the "Add item" button and search for existing issues
-
-The milestone you see in the UI might be a placeholder or cached value.
+MILESTONE PRIORITY: Repository milestones > Projects v2 milestone fields
               `);
                         }
                     }
@@ -53867,20 +53862,18 @@ The milestone you see in the UI might be a placeholder or cached value.
                         // Process field values
                         for (const fieldValue of item.fieldValues.nodes) {
                             const fieldName = fieldValue.field?.name;
-                            // Handle milestone fields specially since they have different structure
+                            // Handle Projects v2 milestone fields (fallback only)
                             if (fieldValue.__typename === 'ProjectV2ItemFieldMilestoneValue') {
-                                // Add detailed debugging for milestone fields
-                                coreExports.info(`🎯 MILESTONE FIELD DEBUG:`);
-                                coreExports.info(`   Field name: "${fieldName || 'unnamed'}"`);
-                                coreExports.info(`   Field value type: ${fieldValue.__typename}`);
-                                coreExports.info(`   Raw milestone object: ${JSON.stringify(fieldValue.milestone, null, 2)}`);
-                                coreExports.info(`   Milestone title: "${fieldValue.milestone?.title || 'NULL'}"`);
-                                milestone = fieldValue.milestone?.title;
-                                if (milestone) {
-                                    coreExports.info(`🎯 Milestone found: "${milestone}" from milestone field`);
+                                const projectMilestone = fieldValue.milestone?.title;
+                                if (projectMilestone && !milestone) {
+                                    milestone = projectMilestone;
+                                    coreExports.info(`📋 Projects v2 milestone found: "${milestone}" (fallback)`);
+                                }
+                                else if (!projectMilestone) {
+                                    coreExports.info(`⚠️ Projects v2 milestone field exists but no milestone assigned`);
                                 }
                                 else {
-                                    coreExports.info(`🎯 Milestone field found but no milestone assigned`);
+                                    coreExports.info(`ℹ️ Projects v2 milestone "${projectMilestone}" found but already have milestone "${milestone}"`);
                                 }
                             }
                             // Log all field names to help debug milestone detection
@@ -53954,22 +53947,28 @@ The milestone you see in the UI might be a placeholder or cached value.
                 const content = item.content;
                 const assignees = content.assignees?.nodes?.map((a) => a.login) || [];
                 const labels = content.labels?.nodes?.map((l) => l.name) || [];
-                // Get milestone from content first, then check field values if not found
+                // PRIORITY: Repository milestones (from actual GitHub issues) are the primary source
                 let milestone = content.milestone?.title;
-                // If no milestone in content, check field values for project milestone
-                if (!milestone) {
+                if (milestone) {
+                    coreExports.info(`✅ Repository milestone found: "${milestone}" for ${content.title}`);
+                }
+                else {
+                    coreExports.info(`⚠️ No repository milestone assigned to ${content.title}`);
+                    // Fallback: Check Projects v2 milestone fields (less common)
                     for (const fieldValue of item.fieldValues.nodes) {
                         if (fieldValue.__typename === 'ProjectV2ItemFieldMilestoneValue') {
                             milestone = fieldValue.milestone?.title;
                             if (milestone) {
-                                coreExports.info(`🎯 Milestone found in field values: "${milestone}" for ${content.title}`);
+                                coreExports.info(`📋 Projects v2 milestone found as fallback: "${milestone}" for ${content.title}`);
                             }
                             break;
                         }
                     }
                 }
-                else {
-                    coreExports.info(`🎯 Milestone found in content: "${milestone}" for ${content.title}`);
+                // Final milestone status
+                if (!milestone) {
+                    milestone = 'No Milestone';
+                    coreExports.info(`❌ No milestone found for ${content.title}`);
                 }
                 // Get status from field values
                 let status = 'Unknown';
