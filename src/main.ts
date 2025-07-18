@@ -19,6 +19,32 @@ interface ProjectItem {
   parentIssues: string[] // Issue numbers that this issue references/depends on
   childIssues: string[] // Issue numbers that reference this issue
   isCompleted?: boolean
+  // Native GitHub sub-issue fields from GraphQL
+  parentIssue?: {
+    id: string
+    number: number
+    title: string
+    repository: {
+      name: string
+      owner: {
+        login: string
+      }
+    }
+  }
+  subIssues?: {
+    nodes: Array<{
+      id: string
+      number: number
+      title: string
+      state: string
+      repository: {
+        name: string
+        owner: {
+          login: string
+        }
+      }
+    }>
+  }
 }
 
 interface ItemGroupings {
@@ -166,6 +192,31 @@ async function fetchProjectData(
                     }
                     repository {
                       name
+                    }
+                    parentIssue {
+                      id
+                      number
+                      title
+                      repository {
+                        name
+                        owner {
+                          login
+                        }
+                      }
+                    }
+                    subIssues(first: 100) {
+                      nodes {
+                        id
+                        number
+                        title
+                        state
+                        repository {
+                          name
+                          owner {
+                            login
+                          }
+                        }
+                      }
                     }
                   }
                   ... on PullRequest {
@@ -547,7 +598,9 @@ MILESTONE PRIORITY: Repository milestones > Projects v2 milestone fields
           isCompleted:
             status.toLowerCase().includes('done') ||
             status.toLowerCase().includes('complete') ||
-            status.toLowerCase().includes('finished')
+            status.toLowerCase().includes('finished'),
+          parentIssue: content.parentIssue,
+          subIssues: content.subIssues
         })
       }
 
@@ -711,78 +764,86 @@ function processIssueRelationships(items: ProjectItem[]): ProjectItem[] {
     }
   }
 
-  // Second pass: parse issue bodies for references and build relationships
-  core.info(`🔍 Starting relationship processing for ${items.length} items`)
+  // Second pass: use native GitHub sub-issue relationships
   core.info(
-    `📋 Item types: ${items.map((i) => `${i.type}(${i.body ? 'has body' : 'no body'})`).join(', ')}`
+    `🔍 Starting relationship processing for ${items.length} items using native sub-issues`
+  )
+  core.info(
+    `📋 Item types: ${items.map((i) => `${i.type}(${i.parentIssue ? 'has parent' : 'no parent'})(${i.subIssues?.nodes?.length || 0} sub-issues)`).join(', ')}`
   )
 
   for (const item of items) {
-    if (item.body && (item.type === 'Issue' || item.type === 'PullRequest')) {
+    if (item.type === 'Issue' && item.repository && item.number) {
       core.info(
         `🔍 Processing issue ${item.repository}#${item.number}: "${item.title}"`
       )
-      core.info(`📝 Body length: ${item.body.length} characters`)
 
-      // Show first 200 characters of body for debugging
-      const bodyPreview = item.body.substring(0, 200).replace(/\n/g, ' ')
-      core.info(
-        `📄 Body preview: "${bodyPreview}${item.body.length > 200 ? '...' : ''}"`
-      )
-
-      // Parse issue references in the body (e.g., #123, repo#123, fixes #123, closes #123)
-      const issueRefRegex =
-        /(?:(?:fixes|closes|resolves|related to|see)\s+)?(?:([a-zA-Z0-9-]+)#)?(\d+)/gi
-      let match
-      let referencesFound = 0
-
-      while ((match = issueRefRegex.exec(item.body)) !== null) {
-        referencesFound++
-        const referencedRepo = match[1] || item.repository // Use current repo if not specified
-        const referencedNumber = match[2]
-        const referencedKey = `${referencedRepo}#${referencedNumber}`
-
-        core.info(
-          `🔍 Found reference in body: "${match[0]}" → ${referencedKey}`
-        )
-
-        const referencedIssue = issueMap.get(referencedKey)
-        if (referencedIssue && referencedIssue.id !== item.id) {
-          // This item references another issue
-          if (!item.parentIssues.includes(referencedKey)) {
-            item.parentIssues.push(referencedKey)
-            core.info(
-              `🔗 Found relationship: ${item.repository}#${item.number} references ${referencedKey}`
-            )
-          }
-
-          // The referenced issue has this as a child
-          if (
-            !referencedIssue.childIssues.includes(
-              `${item.repository}#${item.number}`
-            )
-          ) {
-            referencedIssue.childIssues.push(
-              `${item.repository}#${item.number}`
-            )
-            core.info(
-              `👶 ${referencedKey} now has child: ${item.repository}#${item.number}`
-            )
-          }
-        } else {
+      // Use native GitHub parent issue relationship
+      if (item.parentIssue) {
+        const parentKey = `${item.parentIssue.repository.name}#${item.parentIssue.number}`
+        if (!item.parentIssues.includes(parentKey)) {
+          item.parentIssues.push(parentKey)
           core.info(
-            `❌ No match found for reference: ${referencedKey} (not in project or self-reference)`
+            `🔗 Found native parent relationship: ${item.repository}#${item.number} → ${parentKey}`
+          )
+        }
+
+        // Add this as a child to the parent issue
+        const parentIssue = issueMap.get(parentKey)
+        if (
+          parentIssue &&
+          !parentIssue.childIssues.includes(`${item.repository}#${item.number}`)
+        ) {
+          parentIssue.childIssues.push(`${item.repository}#${item.number}`)
+          core.info(
+            `👶 ${parentKey} now has child: ${item.repository}#${item.number}`
           )
         }
       }
 
-      if (referencesFound === 0) {
+      // Use native GitHub sub-issues relationship
+      if (
+        item.subIssues &&
+        item.subIssues.nodes &&
+        item.subIssues.nodes.length > 0
+      ) {
         core.info(
-          `⚠️ No issue references found in body for ${item.repository}#${item.number}`
+          `📋 Processing ${item.subIssues.nodes.length} sub-issues for ${item.repository}#${item.number}`
         )
-      } else {
+
+        for (const subIssue of item.subIssues.nodes) {
+          const subIssueKey = `${subIssue.repository.name}#${subIssue.number}`
+          if (!item.childIssues.includes(subIssueKey)) {
+            item.childIssues.push(subIssueKey)
+            core.info(
+              `🔗 Found native sub-issue relationship: ${item.repository}#${item.number} → ${subIssueKey}`
+            )
+          }
+
+          // Add this as a parent to the sub-issue
+          const subIssueItem = issueMap.get(subIssueKey)
+          if (
+            subIssueItem &&
+            !subIssueItem.parentIssues.includes(
+              `${item.repository}#${item.number}`
+            )
+          ) {
+            subIssueItem.parentIssues.push(`${item.repository}#${item.number}`)
+            core.info(
+              `👨‍👩‍👧‍👦 ${subIssueKey} now has parent: ${item.repository}#${item.number}`
+            )
+          }
+        }
+      }
+
+      if (
+        !item.parentIssue &&
+        (!item.subIssues ||
+          !item.subIssues.nodes ||
+          item.subIssues.nodes.length === 0)
+      ) {
         core.info(
-          `✅ Found ${referencesFound} references in ${item.repository}#${item.number}`
+          `⚠️ No parent or sub-issues found for ${item.repository}#${item.number}`
         )
       }
     }
