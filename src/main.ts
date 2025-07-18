@@ -607,10 +607,8 @@ function getStatusEmoji(status: string, title: string = ''): string {
   const titleHash = title
     .split('')
     .reduce((hash, char) => hash + char.charCodeAt(0), 0)
-  const emojiOptions = ['🚧', '📋', '✅'] // In Progress, Todo, Done
-  const emojiWeights = [0.5, 0.3, 0.2] // Favor In Progress for better visual variety
 
-  // Use weighted selection based on title hash
+  // Use weighted selection based on title hash (50% 🚧, 30% 📋, 20% ✅)
   const hashMod = titleHash % 100
   if (hashMod < 50) return '🚧' // 50% In Progress
   if (hashMod < 80) return '📋' // 30% Todo
@@ -860,6 +858,13 @@ function groupItemsByMilestones(
     }
   }
 
+  // Remove items without milestones (No Milestone group)
+  if (milestoneGroups['No Milestone']) {
+    const noMilestoneCount = milestoneGroups['No Milestone'].length
+    core.info(`🚫 Filtering out ${noMilestoneCount} items without milestones`)
+    delete milestoneGroups['No Milestone']
+  }
+
   // Debug: log milestones after filtering
   core.info(
     `Milestones after filtering: ${Object.keys(milestoneGroups).join(', ')}`
@@ -890,12 +895,10 @@ function formatSlackMessage(
 ): string {
   const sections: string[] = []
 
-  // Sort milestones alphabetically, but put "No Milestone" at the end
-  const sortedGroups = Object.keys(itemGroupings).sort((a, b) => {
-    if (a === 'No Milestone') return 1
-    if (b === 'No Milestone') return -1
-    return a.localeCompare(b)
-  })
+  // Sort milestones alphabetically (No Milestone group is already filtered out)
+  const sortedGroups = Object.keys(itemGroupings).sort((a, b) =>
+    a.localeCompare(b)
+  )
 
   for (const group of sortedGroups) {
     const items = itemGroupings[group]
