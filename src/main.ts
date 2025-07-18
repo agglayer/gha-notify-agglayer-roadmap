@@ -325,7 +325,7 @@ async function fetchProjectData(
         }
 
         core.info(
-          `📝 Processing item: ${item.content.title || 'No title'} (Type: ${item.content.__typename || 'Unknown'}) | Content keys: ${Object.keys(item.content).join(', ')}`
+          `📝 Processing item: ${item.content.title || 'No title'} (Type: ${item.content.__typename || 'Unknown'}) | Repo: ${item.content.repository?.name || 'None'} | Number: ${item.content.number || 'None'}`
         )
 
         const content = item.content
@@ -339,6 +339,9 @@ async function fetchProjectData(
         for (const fieldValue of item.fieldValues.nodes) {
           if (fieldValue.field?.name === 'Status') {
             status = fieldValue.name || fieldValue.text || 'Unknown'
+            core.info(
+              `   📊 Status found: "${status}" for item: ${content.title}`
+            )
             break
           }
         }
@@ -721,91 +724,70 @@ function formatSlackMessage(
 
     const groupSection = [`*${group}* (${items.length} items):`]
 
-    // Separate parent issues from child issues for tree structure
-    const parentIssues = displayItems.filter(
-      (item) => item.childIssues.length > 0
-    )
-    const childIssues = displayItems.filter(
-      (item) => item.childIssues.length === 0
-    )
-    const allItems = Object.values(itemGroupings).flat()
+    // Show items with proper repository and issue number formatting
+    for (const item of displayItems) {
+      const statusEmoji = getStatusEmoji(item.status)
 
-    // First, show parent issues with progress bars and their children
-    for (const parentItem of parentIssues) {
-      const statusEmoji = getStatusEmoji(parentItem.status)
-      const repoInfo = parentItem.repository
-        ? `[${parentItem.repository}${parentItem.number ? `#${parentItem.number}` : ''}]`
-        : ''
-
-      // Calculate progress and create progress bar
-      const progress = calculateProgress(parentItem, allItems)
-      const progressBar = createProgressBar(progress, 8)
+      // Format repository info - show [repo#number] for issues/PRs
+      const repoInfo =
+        item.repository && item.number
+          ? ` [${item.repository}#${item.number}]`
+          : ''
 
       // Add completion date for Done items
-      const isDone = parentItem.isCompleted
-      const completionInfo = isDone
-        ? ` (${formatDate(parentItem.updatedAt)})`
-        : ''
-
-      groupSection.push(
-        `  ${statusEmoji} <${parentItem.url}|${parentItem.title}>${completionInfo} ${repoInfo}`
-      )
-      groupSection.push(
-        `    📊 ${progressBar} (${parentItem.childIssues.length} sub-issues)`
-      )
-
-      // Show child issues under this parent (if they're in the current milestone)
-      for (const childKey of parentItem.childIssues) {
-        const childItem = displayItems.find(
-          (item) =>
-            item.repository &&
-            item.number &&
-            `${item.repository}#${item.number}` === childKey
-        )
-
-        if (childItem) {
-          const childStatusEmoji = getStatusEmoji(childItem.status)
-          const childRepoInfo = childItem.repository
-            ? `[${childItem.repository}${childItem.number ? `#${childItem.number}` : ''}]`
-            : ''
-          const childCompletionInfo = childItem.isCompleted
-            ? ` (${formatDate(childItem.updatedAt)})`
-            : ''
-
-          groupSection.push(
-            `    ├─ ${childStatusEmoji} <${childItem.url}|${childItem.title}>${childCompletionInfo} ${childRepoInfo}`
-          )
-        }
-      }
-    }
-
-    // Then show standalone child issues (those without parents in this milestone)
-    const standaloneChildren = childIssues.filter((item) => {
-      // Check if any of its parent issues are already shown in this milestone
-      const hasParentInMilestone = item.parentIssues.some((parentKey) =>
-        parentIssues.some(
-          (parent) =>
-            parent.repository &&
-            parent.number &&
-            `${parent.repository}#${parent.number}` === parentKey
-        )
-      )
-      return !hasParentInMilestone
-    })
-
-    for (const item of standaloneChildren) {
-      const statusEmoji = getStatusEmoji(item.status)
-      const statusBadge = item.status !== 'Unknown' ? `${item.status}` : ''
-      const repoInfo = item.repository
-        ? `[${item.repository}${item.number ? `#${item.number}` : ''}]`
-        : ''
       const completionInfo = item.isCompleted
         ? ` (${formatDate(item.updatedAt)})`
         : ''
 
+      // Show the main item without status text, just emoji and title
       groupSection.push(
-        `  ${statusEmoji} ${statusBadge} <${item.url}|${item.title}>${completionInfo} ${repoInfo}`
+        `  ${statusEmoji} <${item.url}|${item.title}>${completionInfo}${repoInfo}`
       )
+
+      // If this item has child issues, show progress bar and children
+      if (item.childIssues.length > 0) {
+        const allItems = Object.values(itemGroupings).flat()
+        const progress = calculateProgress(item, allItems)
+        const progressBar = createProgressBar(progress, 8)
+
+        groupSection.push(
+          `    📊 ${progressBar} (${item.childIssues.length} sub-issues)`
+        )
+
+        // Show child issues with tree formatting
+        const childrenShown = Math.min(3, item.childIssues.length)
+        for (let i = 0; i < childrenShown; i++) {
+          const childKey = item.childIssues[i]
+          const childItem = allItems.find(
+            (child) =>
+              child.repository &&
+              child.number &&
+              `${child.repository}#${child.number}` === childKey
+          )
+
+          if (childItem) {
+            const childStatusEmoji = getStatusEmoji(childItem.status)
+            const childRepoInfo =
+              childItem.repository && childItem.number
+                ? ` [${childItem.repository}#${childItem.number}]`
+                : ''
+            const childCompletionInfo = childItem.isCompleted
+              ? ` (${formatDate(childItem.updatedAt)})`
+              : ''
+
+            groupSection.push(
+              `    ├─ ${childStatusEmoji} <${childItem.url}|${childItem.title}>${childCompletionInfo}${childRepoInfo}`
+            )
+          }
+        }
+
+        // Show "... and X more items" if there are more children
+        if (item.childIssues.length > childrenShown) {
+          groupSection.push(
+            `    ... and ${item.childIssues.length - childrenShown} more items`
+          )
+        }
+      }
     }
 
     if (hasMore) {
@@ -898,6 +880,15 @@ export async function run(): Promise<void> {
     const itemGroupings = groupItemsByMilestones(processedItems, doneItemsDays)
     const groupCount = Object.keys(itemGroupings).length
     core.info(`🎯 Found ${groupCount} milestones`)
+
+    // Debug: Show sample of final items
+    core.info(`📋 Sample of final items:`)
+    const sampleItems = processedItems.slice(0, 3)
+    for (const item of sampleItems) {
+      core.info(
+        `   ${item.type}: "${item.title}" | Status: "${item.status}" | Repo: ${item.repository || 'None'} | Number: ${item.number || 'None'}`
+      )
+    }
 
     // Format message with tree structure and progress bars
     const message = formatSlackMessage(itemGroupings, maxItemsPerUser)
