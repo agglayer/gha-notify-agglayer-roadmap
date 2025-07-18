@@ -251,6 +251,74 @@ async function fetchProjectData(
             core.info(
               `🎯 Raw fieldValues: ${JSON.stringify(item.fieldValues, null, 2)}`
             )
+
+            // Enhanced debugging for content vs draft items
+            core.info(`🎯 ITEM TYPE ANALYSIS:`)
+            core.info(`   Content exists: ${item.content ? 'YES' : 'NO'}`)
+            if (item.content) {
+              core.info(`   Content type: ${item.content.__typename}`)
+              core.info(
+                `   Content milestone: ${item.content.milestone?.title || 'NONE'}`
+              )
+              core.info(`   This is a LINKED ${item.content.__typename}`)
+            } else {
+              core.info(`   This is a DRAFT ISSUE (manual project item)`)
+              core.info(
+                `   Draft issues can only use Projects v2 milestone fields`
+              )
+            }
+
+            // Enhanced milestone field debugging
+            const milestoneFields = item.fieldValues.nodes.filter(
+              (field: any) =>
+                field.__typename === 'ProjectV2ItemFieldMilestoneValue'
+            )
+
+            core.info(`🎯 MILESTONE FIELD ANALYSIS:`)
+            core.info(`   Found ${milestoneFields.length} milestone field(s)`)
+            milestoneFields.forEach((field: any, index: number) => {
+              core.info(`   Milestone field ${index + 1}:`)
+              core.info(`     Field name: ${field.field?.name}`)
+              core.info(
+                `     Milestone value: ${JSON.stringify(field.milestone, null, 2)}`
+              )
+              if (field.milestone === null) {
+                core.info(`     ❌ This milestone field is not assigned`)
+              } else if (field.milestone?.title) {
+                core.info(`     ✅ Milestone found: "${field.milestone.title}"`)
+              }
+            })
+
+            // Provide actionable guidance
+            if (
+              !item.content &&
+              milestoneFields.length > 0 &&
+              milestoneFields[0].milestone === null
+            ) {
+              core.warning(`
+🔍 TROUBLESHOOTING GUIDANCE for item ${item.databaseId}:
+
+This item appears to be a DRAFT ISSUE with no milestone assigned to the Projects v2 milestone field.
+
+POSSIBLE SOLUTIONS:
+1. Convert this draft issue to a linked GitHub issue:
+   - Open the item in your project
+   - Click "Convert to issue" 
+   - Choose a repository
+   - This will create a real GitHub issue that can have repository milestones
+
+2. Assign a milestone to the Projects v2 milestone field:
+   - Open the item in your project
+   - Use the milestone field dropdown to select a milestone
+   - Note: This is different from repository milestones
+
+3. Link an existing issue:
+   - Instead of creating draft issues, add existing GitHub issues to your project
+   - Use the "Add item" button and search for existing issues
+
+The milestone you see in the UI might be a placeholder or cached value.
+              `)
+            }
           }
           const baseUrl = isOrg
             ? `https://github.com/orgs/${owner}/projects/${projectNumber}`
