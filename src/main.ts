@@ -901,11 +901,17 @@ function formatSlackMessage(
   )
 
   for (const group of sortedGroups) {
-    const items = itemGroupings[group]
-    const displayItems = items.slice(0, maxItemsPerUser)
-    const hasMore = items.length > maxItemsPerUser
+    const allItems = itemGroupings[group]
+    // Only show root issues (items without parent issues) to respect dependency tree
+    const rootItems = allItems.filter((item) => item.parentIssues.length === 0)
+    const displayItems = rootItems.slice(0, maxItemsPerUser)
+    const hasMore = rootItems.length > maxItemsPerUser
 
-    const groupSection = [`*${group}* (${items.length} items):`]
+    core.info(
+      `📊 Milestone "${group}": ${allItems.length} total items, ${rootItems.length} root issues (showing ${displayItems.length})`
+    )
+
+    const groupSection = [`*${group}* (${rootItems.length} root issues):`]
 
     // Show items with proper repository and issue number formatting
     for (const item of displayItems) {
@@ -1053,21 +1059,23 @@ function formatSlackMessage(
 
     if (hasMore) {
       groupSection.push(
-        `  _... and ${items.length - maxItemsPerUser} more items_`
+        `  _... and ${rootItems.length - maxItemsPerUser} more items_`
       )
     }
 
     sections.push(groupSection.join('\n'))
   }
 
-  const totalItems = Object.values(itemGroupings).reduce(
-    (sum: number, items: any) => sum + items.length,
+  // Calculate total root issues across all milestones for header
+  const totalRootIssues = Object.values(itemGroupings).reduce(
+    (sum: number, items: any) =>
+      sum + items.filter((item: any) => item.parentIssues.length === 0).length,
     0
   )
   const groupCount = Object.keys(itemGroupings).length
   const groupType = 'milestones'
 
-  const header = `📋 *Roadmap Summary*\n${totalItems} items across ${groupCount} ${groupType}\n`
+  const header = `📋 *Roadmap Summary*\n${totalRootIssues} root issues across ${groupCount} ${groupType}\n`
 
   // Join sections with double line breaks for better readability between milestones
   return header + '\n' + sections.join('\n\n\n')

@@ -54271,10 +54271,13 @@ function formatSlackMessage(itemGroupings, maxItemsPerUser) {
     // Sort milestones alphabetically (No Milestone group is already filtered out)
     const sortedGroups = Object.keys(itemGroupings).sort((a, b) => a.localeCompare(b));
     for (const group of sortedGroups) {
-        const items = itemGroupings[group];
-        const displayItems = items.slice(0, maxItemsPerUser);
-        const hasMore = items.length > maxItemsPerUser;
-        const groupSection = [`*${group}* (${items.length} items):`];
+        const allItems = itemGroupings[group];
+        // Only show root issues (items without parent issues) to respect dependency tree
+        const rootItems = allItems.filter((item) => item.parentIssues.length === 0);
+        const displayItems = rootItems.slice(0, maxItemsPerUser);
+        const hasMore = rootItems.length > maxItemsPerUser;
+        coreExports.info(`📊 Milestone "${group}": ${allItems.length} total items, ${rootItems.length} root issues (showing ${displayItems.length})`);
+        const groupSection = [`*${group}* (${rootItems.length} root issues):`];
         // Show items with proper repository and issue number formatting
         for (const item of displayItems) {
             const statusEmoji = getStatusEmoji(item.status, item.title);
@@ -54382,14 +54385,15 @@ function formatSlackMessage(itemGroupings, maxItemsPerUser) {
             }
         }
         if (hasMore) {
-            groupSection.push(`  _... and ${items.length - maxItemsPerUser} more items_`);
+            groupSection.push(`  _... and ${rootItems.length - maxItemsPerUser} more items_`);
         }
         sections.push(groupSection.join('\n'));
     }
-    const totalItems = Object.values(itemGroupings).reduce((sum, items) => sum + items.length, 0);
+    // Calculate total root issues across all milestones for header
+    const totalRootIssues = Object.values(itemGroupings).reduce((sum, items) => sum + items.filter((item) => item.parentIssues.length === 0).length, 0);
     const groupCount = Object.keys(itemGroupings).length;
     const groupType = 'milestones';
-    const header = `📋 *Roadmap Summary*\n${totalItems} items across ${groupCount} ${groupType}\n`;
+    const header = `📋 *Roadmap Summary*\n${totalRootIssues} root issues across ${groupCount} ${groupType}\n`;
     // Join sections with double line breaks for better readability between milestones
     return header + '\n' + sections.join('\n\n\n');
 }
