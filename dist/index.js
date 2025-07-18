@@ -53768,8 +53768,15 @@ async function fetchProjectData(token, owner, projectNumber, isOrg) {
             }
             // Process items from this page
             for (const item of project.items.nodes) {
+                // Debug: Log what we have for each item
+                coreExports.info(`🔍 Processing item ${item.databaseId || item.id}:`);
+                coreExports.info(`   Content exists: ${item.content ? 'YES' : 'NO'}`);
+                coreExports.info(`   Field values count: ${item.fieldValues?.nodes?.length || 0}`);
                 // Handle items with null/undefined content but try to extract from field values
                 if (!item.content) {
+                    coreExports.error(`❌ REAL ISSUE WITH NULL CONTENT: ID=${item.id} | This should not happen!`);
+                    coreExports.error(`   This indicates a GraphQL query or permissions problem`);
+                    coreExports.error(`   Raw item: ${JSON.stringify(item, null, 2)}`);
                     coreExports.info(`⚠️ Item with null content: ID=${item.id} | FieldValues: ${item.fieldValues?.nodes?.length || 0} | ProjectUpdatedAt: ${item.updatedAt}`);
                     // Try to extract information from field values
                     let title = 'Unknown Title';
@@ -53792,11 +53799,14 @@ async function fetchProjectData(token, owner, projectNumber, isOrg) {
                         if (item.content) {
                             coreExports.info(`   Content type: ${item.content.__typename}`);
                             coreExports.info(`   Content milestone: ${item.content.milestone?.title || 'NONE'}`);
+                            coreExports.info(`   Content title: ${item.content.title || 'NO TITLE'}`);
+                            coreExports.info(`   Content URL: ${item.content.url || 'NO URL'}`);
                             coreExports.info(`   This is a LINKED ${item.content.__typename}`);
                         }
                         else {
-                            coreExports.info(`   This is a DRAFT ISSUE (manual project item)`);
-                            coreExports.info(`   Draft issues can only use Projects v2 milestone fields`);
+                            coreExports.error(`   ❌ CONTENT IS NULL - This should not happen for real issues!`);
+                            coreExports.error(`   This indicates a GraphQL query or permissions issue`);
+                            coreExports.error(`   Full item data: ${JSON.stringify(item, null, 2)}`);
                         }
                         // Enhanced milestone field debugging
                         const milestoneFields = item.fieldValues.nodes.filter((field) => field.__typename === 'ProjectV2ItemFieldMilestoneValue');
@@ -54416,6 +54426,7 @@ async function run() {
             throw new Error('Missing required inputs: github-token, project-url, slack-bot-token, and slack-channel are required');
         }
         coreExports.info('🚀 Starting GitHub Projects to Slack summary...');
+        coreExports.info('🔐 Note: Ensure your GitHub token has "repo" and "read:project" scopes for content access');
         // Parse project URL
         const { owner, projectNumber, isOrg } = parseProjectUrl(projectUrl);
         coreExports.info(`📊 Fetching project data for ${owner}/${projectNumber} (${isOrg ? 'organization' : 'user'})`);

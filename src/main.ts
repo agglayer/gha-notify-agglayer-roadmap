@@ -223,8 +223,21 @@ async function fetchProjectData(
 
       // Process items from this page
       for (const item of project.items.nodes) {
+        // Debug: Log what we have for each item
+        core.info(`🔍 Processing item ${item.databaseId || item.id}:`)
+        core.info(`   Content exists: ${item.content ? 'YES' : 'NO'}`)
+        core.info(
+          `   Field values count: ${item.fieldValues?.nodes?.length || 0}`
+        )
+
         // Handle items with null/undefined content but try to extract from field values
         if (!item.content) {
+          core.error(
+            `❌ REAL ISSUE WITH NULL CONTENT: ID=${item.id} | This should not happen!`
+          )
+          core.error(`   This indicates a GraphQL query or permissions problem`)
+          core.error(`   Raw item: ${JSON.stringify(item, null, 2)}`)
+
           core.info(
             `⚠️ Item with null content: ID=${item.id} | FieldValues: ${item.fieldValues?.nodes?.length || 0} | ProjectUpdatedAt: ${item.updatedAt}`
           )
@@ -260,12 +273,17 @@ async function fetchProjectData(
               core.info(
                 `   Content milestone: ${item.content.milestone?.title || 'NONE'}`
               )
+              core.info(`   Content title: ${item.content.title || 'NO TITLE'}`)
+              core.info(`   Content URL: ${item.content.url || 'NO URL'}`)
               core.info(`   This is a LINKED ${item.content.__typename}`)
             } else {
-              core.info(`   This is a DRAFT ISSUE (manual project item)`)
-              core.info(
-                `   Draft issues can only use Projects v2 milestone fields`
+              core.error(
+                `   ❌ CONTENT IS NULL - This should not happen for real issues!`
               )
+              core.error(
+                `   This indicates a GraphQL query or permissions issue`
+              )
+              core.error(`   Full item data: ${JSON.stringify(item, null, 2)}`)
             }
 
             // Enhanced milestone field debugging
@@ -1099,6 +1117,9 @@ export async function run(): Promise<void> {
     }
 
     core.info('🚀 Starting GitHub Projects to Slack summary...')
+    core.info(
+      '🔐 Note: Ensure your GitHub token has "repo" and "read:project" scopes for content access'
+    )
 
     // Parse project URL
     const { owner, projectNumber, isOrg } = parseProjectUrl(projectUrl)
