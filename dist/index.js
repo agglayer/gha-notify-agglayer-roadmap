@@ -53777,12 +53777,17 @@ async function fetchProjectData(token, owner, projectNumber, isOrg) {
                 coreExports.info(`   Field values count: ${item.fieldValues?.nodes?.length || 0}`);
                 // Handle items with null/undefined content
                 if (!item.content) {
-                    coreExports.error(`❌ ITEM WITH NULL CONTENT: ID=${item.id}`);
-                    coreExports.error(`   This likely indicates:`);
-                    coreExports.error(`   1. Draft issue (manual project item)`);
-                    coreExports.error(`   2. GraphQL query issue`);
-                    coreExports.error(`   3. Insufficient token permissions`);
-                    coreExports.error(`   Raw item: ${JSON.stringify(item, null, 2)}`);
+                    coreExports.error(`❌ REAL ISSUE WITH NULL CONTENT: ID=${item.id}`);
+                    coreExports.error(`   🚨 This should NOT happen for real GitHub issues!`);
+                    coreExports.error(`   Most likely cause: TOKEN PERMISSIONS`);
+                    coreExports.error(`   
+   DEBUG CHECKLIST:
+   ✓ Is this a real GitHub issue? YES (user confirmed)
+   ✗ Does token have 'repo' scope? CHECK THIS
+   ✗ Can token owner access agglayer/pm repo? CHECK THIS
+   ✗ Is the issue in agglayer/pm repository? VERIFY THIS
+          `);
+                    coreExports.error(`   Raw item data: ${JSON.stringify(item, null, 2)}`);
                     coreExports.info(`⚠️ Processing as draft item: ID=${item.id} | FieldValues: ${item.fieldValues?.nodes?.length || 0}`);
                     // Try to extract information from field values
                     let title = 'Unknown Title';
@@ -54426,6 +54431,8 @@ async function run() {
         }
         coreExports.info('🚀 Starting GitHub Projects to Slack summary...');
         coreExports.info('🔐 Note: Ensure your GitHub token has "repo" and "read:project" scopes for content access');
+        coreExports.info('📍 CRITICAL: Token must have access to agglayer/pm repository to read issue content');
+        coreExports.info('📍 If content is null, check: 1) Token has repo scope 2) Token owner can access agglayer/pm');
         // Parse project URL
         const { owner, projectNumber, isOrg } = parseProjectUrl(projectUrl);
         coreExports.info(`📊 Fetching project data for ${owner}/${projectNumber} (${isOrg ? 'organization' : 'user'})`);

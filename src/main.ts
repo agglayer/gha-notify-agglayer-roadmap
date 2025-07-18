@@ -236,12 +236,17 @@ async function fetchProjectData(
 
         // Handle items with null/undefined content
         if (!item.content) {
-          core.error(`❌ ITEM WITH NULL CONTENT: ID=${item.id}`)
-          core.error(`   This likely indicates:`)
-          core.error(`   1. Draft issue (manual project item)`)
-          core.error(`   2. GraphQL query issue`)
-          core.error(`   3. Insufficient token permissions`)
-          core.error(`   Raw item: ${JSON.stringify(item, null, 2)}`)
+          core.error(`❌ REAL ISSUE WITH NULL CONTENT: ID=${item.id}`)
+          core.error(`   🚨 This should NOT happen for real GitHub issues!`)
+          core.error(`   Most likely cause: TOKEN PERMISSIONS`)
+          core.error(`   
+   DEBUG CHECKLIST:
+   ✓ Is this a real GitHub issue? YES (user confirmed)
+   ✗ Does token have 'repo' scope? CHECK THIS
+   ✗ Can token owner access agglayer/pm repo? CHECK THIS
+   ✗ Is the issue in agglayer/pm repository? VERIFY THIS
+          `)
+          core.error(`   Raw item data: ${JSON.stringify(item, null, 2)}`)
 
           core.info(
             `⚠️ Processing as draft item: ID=${item.id} | FieldValues: ${item.fieldValues?.nodes?.length || 0}`
@@ -1113,6 +1118,12 @@ export async function run(): Promise<void> {
     core.info('🚀 Starting GitHub Projects to Slack summary...')
     core.info(
       '🔐 Note: Ensure your GitHub token has "repo" and "read:project" scopes for content access'
+    )
+    core.info(
+      '📍 CRITICAL: Token must have access to agglayer/pm repository to read issue content'
+    )
+    core.info(
+      '📍 If content is null, check: 1) Token has repo scope 2) Token owner can access agglayer/pm'
     )
 
     // Parse project URL
