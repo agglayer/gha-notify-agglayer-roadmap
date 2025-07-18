@@ -53671,6 +53671,16 @@ async function fetchProjectData(token, owner, projectNumber, isOrg) {
                       }
                       date
                     }
+                    ... on ProjectV2ItemFieldMilestoneValue {
+                      field {
+                        ... on ProjectV2FieldCommon {
+                          name
+                        }
+                      }
+                      milestone {
+                        title
+                      }
+                    }
                     ... on ProjectV2ItemFieldRepositoryValue {
                       field {
                         ... on ProjectV2FieldCommon {
@@ -53780,8 +53790,24 @@ async function fetchProjectData(token, owner, projectNumber, isOrg) {
                         // Process field values
                         for (const fieldValue of item.fieldValues.nodes) {
                             const fieldName = fieldValue.field?.name;
+                            // Handle milestone fields specially since they have different structure
+                            if (fieldValue.__typename === 'ProjectV2ItemFieldMilestoneValue') {
+                                milestone = fieldValue.milestone?.title;
+                                if (milestone) {
+                                    coreExports.info(`🎯 Milestone found: "${milestone}" from milestone field`);
+                                }
+                                else {
+                                    coreExports.info(`🎯 Milestone field found but no milestone assigned`);
+                                }
+                            }
                             // Log all field names to help debug milestone detection
-                            coreExports.info(`🔍 Field found: "${fieldName}" | Type: ${fieldValue.__typename} | Value: ${fieldValue.text || fieldValue.name || fieldValue.date || 'N/A'}`);
+                            const displayValue = fieldValue.__typename === 'ProjectV2ItemFieldMilestoneValue'
+                                ? fieldValue.milestone?.title || 'No milestone assigned'
+                                : fieldValue.text ||
+                                    fieldValue.name ||
+                                    fieldValue.date ||
+                                    'N/A';
+                            coreExports.info(`🔍 Field found: "${fieldName || 'unnamed'}" | Type: ${fieldValue.__typename} | Value: ${displayValue}`);
                             // Log useful field information
                             if (fieldValue.date) {
                                 coreExports.info(`📅 Date field found: ${fieldName} = ${fieldValue.date}`);
@@ -53791,16 +53817,6 @@ async function fetchProjectData(token, owner, projectNumber, isOrg) {
                             }
                             else if (fieldName === 'Status') {
                                 status = fieldValue.name || fieldValue.text || status;
-                            }
-                            else if (fieldName === 'Milestone' ||
-                                fieldName === 'Sprint' ||
-                                fieldName === 'Epic') {
-                                // Check multiple possible milestone field names
-                                milestone =
-                                    fieldValue.text || fieldValue.name || fieldValue.title;
-                                if (milestone) {
-                                    coreExports.info(`🎯 Milestone found: "${milestone}" from field "${fieldName}"`);
-                                }
                             }
                             else if (fieldName === 'Assignees') {
                                 // Extract assignees from the field value
@@ -53855,7 +53871,23 @@ async function fetchProjectData(token, owner, projectNumber, isOrg) {
                 const content = item.content;
                 const assignees = content.assignees?.nodes?.map((a) => a.login) || [];
                 const labels = content.labels?.nodes?.map((l) => l.name) || [];
-                const milestone = content.milestone?.title;
+                // Get milestone from content first, then check field values if not found
+                let milestone = content.milestone?.title;
+                // If no milestone in content, check field values for project milestone
+                if (!milestone) {
+                    for (const fieldValue of item.fieldValues.nodes) {
+                        if (fieldValue.__typename === 'ProjectV2ItemFieldMilestoneValue') {
+                            milestone = fieldValue.milestone?.title;
+                            if (milestone) {
+                                coreExports.info(`🎯 Milestone found in field values: "${milestone}" for ${content.title}`);
+                            }
+                            break;
+                        }
+                    }
+                }
+                else {
+                    coreExports.info(`🎯 Milestone found in content: "${milestone}" for ${content.title}`);
+                }
                 // Get status from field values
                 let status = 'Unknown';
                 for (const fieldValue of item.fieldValues.nodes) {
