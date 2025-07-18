@@ -724,15 +724,27 @@ function processIssueRelationships(items: ProjectItem[]): ProjectItem[] {
       )
       core.info(`📝 Body length: ${item.body.length} characters`)
 
+      // Show first 200 characters of body for debugging
+      const bodyPreview = item.body.substring(0, 200).replace(/\n/g, ' ')
+      core.info(
+        `📄 Body preview: "${bodyPreview}${item.body.length > 200 ? '...' : ''}"`
+      )
+
       // Parse issue references in the body (e.g., #123, repo#123, fixes #123, closes #123)
       const issueRefRegex =
         /(?:(?:fixes|closes|resolves|related to|see)\s+)?(?:([a-zA-Z0-9-]+)#)?(\d+)/gi
       let match
+      let referencesFound = 0
 
       while ((match = issueRefRegex.exec(item.body)) !== null) {
+        referencesFound++
         const referencedRepo = match[1] || item.repository // Use current repo if not specified
         const referencedNumber = match[2]
         const referencedKey = `${referencedRepo}#${referencedNumber}`
+
+        core.info(
+          `🔍 Found reference in body: "${match[0]}" → ${referencedKey}`
+        )
 
         const referencedIssue = issueMap.get(referencedKey)
         if (referencedIssue && referencedIssue.id !== item.id) {
@@ -758,8 +770,20 @@ function processIssueRelationships(items: ProjectItem[]): ProjectItem[] {
             )
           }
         } else {
-          core.info(`❌ No match found for reference: ${referencedKey}`)
+          core.info(
+            `❌ No match found for reference: ${referencedKey} (not in project or self-reference)`
+          )
         }
+      }
+
+      if (referencesFound === 0) {
+        core.info(
+          `⚠️ No issue references found in body for ${item.repository}#${item.number}`
+        )
+      } else {
+        core.info(
+          `✅ Found ${referencesFound} references in ${item.repository}#${item.number}`
+        )
       }
     }
   }
@@ -774,8 +798,25 @@ function processIssueRelationships(items: ProjectItem[]): ProjectItem[] {
 
   for (const parent of itemsWithChildren) {
     core.info(
-      `👨‍👩‍👧‍👦 ${parent.repository}#${parent.number} has ${parent.childIssues.length} children: ${parent.childIssues.join(', ')}`
+      `👨‍👩‍👧‍👦 ${parent.repository}#${parent.number} "${parent.title}" has ${parent.childIssues.length} children: ${parent.childIssues.join(', ')}`
     )
+  }
+
+  for (const child of itemsWithParents) {
+    core.info(
+      `👶 ${child.repository}#${child.number} "${child.title}" has ${child.parentIssues.length} parents: ${child.parentIssues.join(', ')}`
+    )
+  }
+
+  // Debug: Show all items and their relationship status
+  core.info(`🔍 All items relationship status:`)
+  for (const item of items) {
+    if (item.repository && item.number) {
+      const isRoot = item.parentIssues.length === 0
+      core.info(
+        `   ${item.repository}#${item.number}: "${item.title}" | Root: ${isRoot} | Children: ${item.childIssues.length} | Parents: ${item.parentIssues.length} | Milestone: "${item.milestone}"`
+      )
+    }
   }
 
   return items
