@@ -53780,10 +53780,8 @@ async function fetchProjectData(token, owner, projectNumber, isOrg) {
                         // Process field values
                         for (const fieldValue of item.fieldValues.nodes) {
                             const fieldName = fieldValue.field?.name;
-                            // Only log field details for debugging assignees
-                            if (fieldName === 'Assignees') {
-                                coreExports.info(`Field: ${fieldName} | Value type: ${fieldValue.__typename}`);
-                            }
+                            // Log all field names to help debug milestone detection
+                            coreExports.info(`🔍 Field found: "${fieldName}" | Type: ${fieldValue.__typename} | Value: ${fieldValue.text || fieldValue.name || fieldValue.date || 'N/A'}`);
                             // Log useful field information
                             if (fieldValue.date) {
                                 coreExports.info(`📅 Date field found: ${fieldName} = ${fieldValue.date}`);
@@ -53794,8 +53792,15 @@ async function fetchProjectData(token, owner, projectNumber, isOrg) {
                             else if (fieldName === 'Status') {
                                 status = fieldValue.name || fieldValue.text || status;
                             }
-                            else if (fieldName === 'Milestone') {
-                                milestone = fieldValue.text || fieldValue.name;
+                            else if (fieldName === 'Milestone' ||
+                                fieldName === 'Sprint' ||
+                                fieldName === 'Epic') {
+                                // Check multiple possible milestone field names
+                                milestone =
+                                    fieldValue.text || fieldValue.name || fieldValue.title;
+                                if (milestone) {
+                                    coreExports.info(`🎯 Milestone found: "${milestone}" from field "${fieldName}"`);
+                                }
                             }
                             else if (fieldName === 'Assignees') {
                                 // Extract assignees from the field value
@@ -54252,6 +54257,10 @@ function formatSlackMessage(itemGroupings, maxItemsPerUser) {
                     groupSection.push(`    ... and ${demoSubIssueCount - subIssuesToShow} more items`);
                 }
             }
+            // Add empty line after each item for better readability (except the last one)
+            if (displayItems.indexOf(item) < displayItems.length - 1) {
+                groupSection.push('');
+            }
         }
         if (hasMore) {
             groupSection.push(`  _... and ${items.length - maxItemsPerUser} more items_`);
@@ -54262,7 +54271,8 @@ function formatSlackMessage(itemGroupings, maxItemsPerUser) {
     const groupCount = Object.keys(itemGroupings).length;
     const groupType = 'milestones';
     const header = `📋 *Roadmap Summary*\n${totalItems} items across ${groupCount} ${groupType}\n`;
-    return header + '\n' + sections.join('\n\n');
+    // Join sections with double line breaks for better readability between milestones
+    return header + '\n' + sections.join('\n\n\n');
 }
 /**
  * Send message to Slack
@@ -54313,11 +54323,21 @@ async function run() {
         const itemGroupings = groupItemsByMilestones(processedItems, doneItemsDays);
         const groupCount = Object.keys(itemGroupings).length;
         coreExports.info(`🎯 Found ${groupCount} milestones`);
-        // Debug: Show sample of final items
+        // Debug: Show sample of final items and milestone distribution
         coreExports.info(`📋 Sample of final items:`);
         const sampleItems = processedItems.slice(0, 3);
         for (const item of sampleItems) {
-            coreExports.info(`   ${item.type}: "${item.title}" | Status: "${item.status}" | Repo: ${item.repository || 'None'} | Number: ${item.number || 'None'}`);
+            coreExports.info(`   ${item.type}: "${item.title}" | Status: "${item.status}" | Milestone: "${item.milestone || 'None'}" | Repo: ${item.repository || 'None'} | Number: ${item.number || 'None'}`);
+        }
+        // Debug: Show milestone distribution
+        const milestoneCount = new Map();
+        for (const item of processedItems) {
+            const milestone = item.milestone || 'No Milestone';
+            milestoneCount.set(milestone, (milestoneCount.get(milestone) || 0) + 1);
+        }
+        coreExports.info(`🎯 Milestone distribution:`);
+        for (const [milestone, count] of milestoneCount.entries()) {
+            coreExports.info(`   "${milestone}": ${count} items`);
         }
         // Format message with tree structure and progress bars
         const message = formatSlackMessage(itemGroupings, maxItemsPerUser);
